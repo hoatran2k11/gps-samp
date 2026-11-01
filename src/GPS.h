@@ -46,36 +46,32 @@
 
 #define MAX_NODE_POINTS 5000
 
-/*
-	GPS Redux — dùng được cho cả single player lẫn SAMP (GTA SA 1.0 US).
-
-	Single player : dẫn đường tới waypoint (bản đồ pause menu) và blip nhiệm vụ.
-	SAMP          : dẫn đường tới waypoint; tuỳ chọn thêm blip toạ độ do server tạo
-	                ([Multiplayer] trackServerBlips = 1). SAMP không chạy script nhiệm vụ
-	                của game nên không có "mission blip" như single player.
-*/
+// GPS Redux: works for both single player and SAMP (GTA SA 1.0 US).
+// Single player: routes to the waypoint and to mission blips.
+// SAMP: routes to the waypoint, plus optional server-created coordinate blips
+// ([Multiplayer] trackServerBlips = 1). SAMP runs no mission scripts, so there
+// are no mission blips there.
 class GPS
 {
   private:
-	// Một tuyến đường tính bất đồng bộ. `points`/`distance`/`epoch` chỉ được đụng khi giữ pathMutex.
-	// `points` là vector bất biến được publish nguyên khối (thread tính đường tạo vector mới rồi đổi
-	// con trỏ), nên thread game chỉ cần giữ khoá đúng lúc copy con trỏ, không phải suốt lúc vẽ.
+	// An asynchronously computed route. `points`/`distance`/`epoch` may only be touched while holding pathMutex.
+	// `points` is an immutable vector published as a whole (the pathfinding thread builds a new vector and swaps
+	// the pointer), so the game thread only needs the lock while copying the pointer, not while drawing.
 	struct Route
 	{
-		std::shared_ptr<const std::vector<CVector2D>> points; // toạ độ XY thế giới của các node
+		std::shared_ptr<const std::vector<CVector2D>> points;
 		float distance = 0.0f;
-		int epoch = 0; // tăng mỗi khi đổi đích, để bỏ kết quả của lượt tính đã cũ
+		int epoch = 0;
 
-		// Chỉ thread game đụng tới (điều tiết tần suất tính lại).
 		bool requested = false;
 		ULONGLONG lastRequestMs = 0;
 		CVector lastFrom, lastTo;
 
-		bool busy = false; // đang chờ/đang tính — bảo vệ bởi jobMutex
+		bool busy = false;
 	};
 
-	// Ảnh chụp trạng thái người chơi, lấy trên thread game để thread tính đường
-	// không phải chạm vào con trỏ CPed/CVehicle (có thể bị giải phóng bất kỳ lúc nào).
+	// Snapshot of the player state, taken on the game thread, so the pathfinding thread never
+	// dereferences CPed/CVehicle pointers (they can be freed at any time).
 	struct PathQuery
 	{
 		CVector from;
@@ -87,11 +83,9 @@ class GPS
 	void Run();
 	void Update();
 
-	// Một thread tính đường duy nhất (ưu tiên thấp), thay cho việc tạo thread mới mỗi lần.
 	static DWORD WINAPI WorkerThread(LPVOID param);
 	void workerLoop();
 
-	// Cài hook sự kiện trên một thread riêng (xem GPS.cpp: SAMP ghi đè hook sớm).
 	static DWORD WINAPI InstallThread(LPVOID param);
 	void installEventHooks();
 	static bool waitForSampHook(int timeoutMs, util::Logger &log);
@@ -103,13 +97,11 @@ class GPS
 	tRadarTrace *findTargetTrace() const;
 	tRadarTrace *findMissionTrace(const CVector &playerPos, CVector &destOut) const;
 
-	// Đích dẫn đường thứ hai (ngoài waypoint): blip nhiệm vụ (single player) hoặc
-	// checkpoint do server tạo (SAMP).
 	struct Target
 	{
 		CVector pos;
 		CRGBA color;
-		const void *id = nullptr; // nhận diện "cùng một đích" giữa các khung hình
+		const void *id = nullptr;
 	};
 	bool findServerTarget(const CVector &playerPos, Target &out);
 	bool resolveTraceDestination(const tRadarTrace *trace, CVector &out) const;
@@ -123,7 +115,7 @@ class GPS
 	util::Config cfg = util::Config("SA.GPS.CONF.ini");
 	util::Logger logger = util::Logger(false);
 	util::GameMode mode = util::GameMode::SinglePlayer;
-	bool active = false; // false nếu không phải GTA SA 1.0 US (không patch/không vẽ gì cả)
+	bool active = false;
 
 	CPed *player = nullptr;
 
@@ -135,8 +127,7 @@ class GPS
 	int lastTargetBlip = 0;
 	const void *lastMissionTrace = nullptr;
 
-	// Chỉ để ghi log chẩn đoán khi trạng thái đổi (tránh spam mỗi khung hình).
-	bool updatedSinceDraw = false; // Update() đã chạy kể từ lần vẽ trước chưa
+	bool updatedSinceDraw = false;
 	bool diagFallbackLogged = false;
 	bool diagFirstFrame = true;
 	int diagNavEnabled = -1;
@@ -153,7 +144,7 @@ class GPS
 
 	struct Job
 	{
-		Route *route = nullptr; // nullptr = không có việc
+		Route *route = nullptr;
 		PathQuery query{};
 		int epoch = 0;
 	};
@@ -163,11 +154,10 @@ class GPS
 	bool workerStop = false;
 	std::array<CNodeAddress, MAX_NODE_POINTS> workerNodes{};
 
-	// Bộ đệm game giữ con trỏ tới (patch bằng địa chỉ cố định) nên phải sống suốt phiên chơi.
+	// The game holds pointers into this buffer (patched at fixed addresses), so it must live for the whole session.
 	std::array<char, 1024> pathNodesToStream{};
 	std::array<int, 50000> pathNodes{};
 
-	// Bộ đệm vẽ (chỉ dùng trên thread game).
 	std::vector<CVector2D> tmpNodePoints = std::vector<CVector2D>(MAX_NODE_POINTS);
 	std::vector<RwIm2DVertex> lineVerts = std::vector<RwIm2DVertex>(MAX_NODE_POINTS * 4);
 

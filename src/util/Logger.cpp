@@ -52,4 +52,4 @@ namespace util
 			logfile.open(path, std::ios::out);
 		}
 	}
-} // namespace util
+}

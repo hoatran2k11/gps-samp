@@ -4,14 +4,11 @@
 
 namespace util
 {
-	// Meters to yards.
 	constexpr float mtoyard(float m)
 	{
 		return m * 1.094f;
 	}
 
-	// 1 đơn vị khoảng cách trong game = 1 mét.
-	// units: false = hệ mét (m / KM), true = hệ Anh (yrds / Mi).
 	inline std::string makeDist(float dist, const bool units)
 	{
 		char buf[64];
@@ -32,4 +29,4 @@ namespace util
 		}
 		return buf;
 	}
-} // namespace util
+}

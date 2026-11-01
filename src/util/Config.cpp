@@ -12,7 +12,7 @@ namespace util
 {
 	namespace
 	{
-		// Trả về BẢN SAO: mINI::get() trả giá trị theo kiểu by-value, nên không được giữ/trả tham chiếu tới nó.
+		// Returns a COPY: mINI::get() returns by value, so never hold or return a reference to it.
 		std::string Get(const mINI::INIStructure &ini, const char *section, const char *key,
 						const std::string &fallback)
 		{
@@ -43,7 +43,6 @@ namespace util
 			return std::atoi(Get(ini, s, k, fb).c_str());
 		}
 
-		// "r, g, b, a" -> CRGBA. Sai định dạng thì giữ nguyên màu mặc định.
 		void GetColor(const mINI::INIStructure &ini, const char *k, CRGBA &out)
 		{
 			const std::string v = Get(ini, "Custom Colors", k, "");
@@ -61,7 +60,7 @@ namespace util
 			out.b = clamp(b);
 			out.a = clamp(a);
 		}
-	} // namespace
+	}
 
 	std::string GetModuleDirectory()
 	{
@@ -82,7 +81,6 @@ namespace util
 
 	Config::Config(const char *filename)
 	{
-		// Ưu tiên file cạnh .asi (đúng cả khi chạy từ scripts/, modloader/ hay thư mục game).
 		mINI::INIStructure ini;
 		const std::string beside = GetModuleDirectory() + filename;
 		if (mINI::INIFile(beside).read(ini))
@@ -96,7 +94,6 @@ namespace util
 				loadedFrom = filename;
 		}
 
-		/* Navigation */
 		RESPECT_LANE_DIRECTION = GetBool(ini, "Navigation", "respectTrafficLaneDirection", RESPECT_LANE_DIRECTION);
 		GPS_LINE_WIDTH = GetFloat(ini, "Navigation", "lineWidth", GPS_LINE_WIDTH);
 		ENABLE_BMX = GetBool(ini, "Navigation", "enableOnBicycles", ENABLE_BMX);
@@ -104,13 +101,11 @@ namespace util
 		ENABLE_MOVING = GetBool(ini, "Navigation", "trackMovingTargets", ENABLE_MOVING);
 		DISABLE_PROXIMITY = GetFloat(ini, "Navigation", "removeRadius", DISABLE_PROXIMITY);
 
-		/* Extras */
 		ENABLE_DISTANCE_TEXT = GetBool(ini, "Extras", "displayDistance", ENABLE_DISTANCE_TEXT);
 		DISTANCE_UNITS = GetBool(ini, "Extras", "distanceUnits", DISTANCE_UNITS);
 
-		/* Custom Colors */
 		ENABLE_CUSTOM_CLRS = GetBool(ini, "Custom Colors", "enabled", ENABLE_CUSTOM_CLRS);
-		GetColor(ini, "waypoint", GPS_LINE_CLR); // màu đường waypoint: luôn áp dụng
+		GetColor(ini, "waypoint", GPS_LINE_CLR);
 		if (ENABLE_CUSTOM_CLRS)
 		{
 			GetColor(ini, "red", CC_RED);
@@ -122,16 +117,13 @@ namespace util
 			GetColor(ini, "cyan", CC_CYAN);
 		}
 
-		/* Performance */
 		UPDATE_INTERVAL_MS = std::clamp(GetInt(ini, "Performance", "updateInterval", UPDATE_INTERVAL_MS), 0, 10000);
 		MIN_MOVE_DISTANCE = std::max(0.0f, GetFloat(ini, "Performance", "minMoveDistance", MIN_MOVE_DISTANCE));
 
-		/* Multiplayer */
 		MP_ENABLED = GetBool(ini, "Multiplayer", "enabled", MP_ENABLED);
 		MP_TRACK_CHECKPOINTS = GetBool(ini, "Multiplayer", "trackServerCheckpoints", MP_TRACK_CHECKPOINTS);
-		CHECKPOINT_CLR = GPS_LINE_CLR; // mặc định cùng màu waypoint
+		CHECKPOINT_CLR = GPS_LINE_CLR;
 		{
-			// [Multiplayer] checkpointColor = r, g, b, a  (tuỳ chọn)
 			const std::string v = Get(ini, "Multiplayer", "checkpointColor", "");
 			int r, g, b, a = 255;
 			if (!v.empty() && std::sscanf(v.c_str(), " %d , %d , %d , %d", &r, &g, &b, &a) >= 3)
@@ -141,13 +133,11 @@ namespace util
 			}
 		}
 
-		/* Misc */
 		LOGFILE_ENABLED = GetBool(ini, "Misc", "enableLog", LOGFILE_ENABLED);
 		FORCE_MODE = GetInt(ini, "Misc", "forceMode", FORCE_MODE);
-		// Không tìm thấy file cấu hình: bật log để còn biết lý do khi mod "không chạy".
 		if (loadedFrom.empty())
 			LOGFILE_ENABLED = true;
 
-		// Không ghi ngược file: mINI sẽ xoá hết comment trong file cấu hình của người dùng.
+		// Never write the file back: mINI would strip all comments from the user's config.
 	}
-} // namespace util
+}

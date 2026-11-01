@@ -5,7 +5,7 @@ namespace util
 {
 	inline CRGBA SetupColor(short color, bool friendly, const struct Config& cfg)
 	{
-		// Màu ngoài khoảng 1..8 (kể cả -1 của waypoint) dùng màu đường GPS mặc định.
+		// Colors outside 1..8 (including the waypoint's -1) use the default GPS line color.
 		if (color < 1 || color > 8)
 			return cfg.GPS_LINE_CLR;
 
@@ -14,40 +14,38 @@ namespace util
 		{
 			switch (color)
 			{
-			case 0: // RED
+			case 0:
 				clr = cfg.CC_RED;
 				break;
-			case 1: // GREEN
+			case 1:
 				clr = cfg.CC_GREEN;
 				break;
-			case 2: // BLUE
+			case 2:
 				clr = cfg.CC_BLUE;
 				break;
-			case 3: // WHITE
+			case 3:
 				clr = cfg.CC_WHITE;
 				break;
-			case 4: // YELLOW
+			case 4:
 				clr = cfg.CC_YELLOW;
 				break;
-			case 5: // PURPLE
+			case 5:
 				clr = cfg.CC_PURPLE;
 				break;
-			case 6: // CYAN
+			case 6:
 				clr = cfg.CC_CYAN;
 				break;
-			case 7: // Depends on whether blip is friendly.
+			case 7:
 				if (friendly)
 				{
-					// BLUE
 					clr = cfg.CC_BLUE;
 				}
 				else
 				{
-					// RED
 					clr = cfg.CC_RED;
 				}
 				break;
-			case 8: // DESTINATION
+			case 8:
 				clr = cfg.CC_YELLOW;
 				break;
 			}
@@ -68,4 +66,4 @@ namespace util
 
 		vertex.emissiveColor = RWRGBALONG(clr.r, clr.g, clr.b, clr.a);
 	}
-} // namespace util
+}

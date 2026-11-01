@@ -14,8 +14,8 @@ namespace util
 
 	  public:
 		void Log(const char *val);
-		void LogF(const char *fmt, ...); // printf-style
+		void LogF(const char *fmt, ...);
 		Logger() = default;
 		explicit Logger(bool enabled);
 	};
-} // namespace util
+}
