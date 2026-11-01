@@ -1,0 +1,26 @@
+# ninja log v6
+18	51	8152018440328785	D:/Project/Code/game/GTA-GPS-Redux/build/CMakeFiles/cmake.verify_globs	823787fd670353b0
+35	9448	8151174002013412	CMakeFiles/gps_redux.dir/src/GPS.cpp.obj	48eef5b8587982c7
+45	4218	8151174002123109	CMakeFiles/gps_redux.dir/src/util/Logger.cpp.obj	9fe7cc38146fc6f7
+50	6267	8152018092863647	CMakeFiles/gps_redux.dir/src/util/Config.cpp.obj	e8b3e1ecebbc75a
+57	486	8152018440730937	SA.GPS.REDUX.asi	f007bf3f648da9c3
+57	486	8152018440730937	SA.GPS.REDUX.lib	f007bf3f648da9c3
+78	1699	8152010815258759	CMakeFiles/gps_redux.dir/src/BootTrace.cpp.obj	c5fc77916b651006
+27	69	8152023466405703	D:/Project/Code/game/GTA-GPS-Redux/build/CMakeFiles/cmake.verify_globs	823787fd670353b0
+75	515	8152023466875228	SA.GPS.REDUX.asi	2174792e2d2a7e0a
+75	515	8152023466875228	SA.GPS.REDUX.lib	2174792e2d2a7e0a
+12	45	8152033675770866	D:/Project/Code/game/GTA-GPS-Redux/build/CMakeFiles/cmake.verify_globs	823787fd670353b0
+66	4827	8152033676307914	CMakeFiles/gps_redux.dir/src/util/Logger.cpp.obj	9fe7cc38146fc6f7
+58	5906	8152033676226609	CMakeFiles/gps_redux.dir/src/util/Config.cpp.obj	e8b3e1ecebbc75a
+51	10910	8152033676169801	CMakeFiles/gps_redux.dir/src/GPS.cpp.obj	48eef5b8587982c7
+10917	11354	8152033784837123	SA.GPS.REDUX.asi	2174792e2d2a7e0a
+10917	11354	8152033784837123	SA.GPS.REDUX.lib	2174792e2d2a7e0a
+20	53	8152060967811261	D:/Project/Code/game/GTA-GPS-Redux/build/CMakeFiles/cmake.verify_globs	823787fd670353b0
+72	4734	8152060968323180	CMakeFiles/gps_redux.dir/src/util/Logger.cpp.obj	9fe7cc38146fc6f7
+65	5972	8152060968253370	CMakeFiles/gps_redux.dir/src/util/Config.cpp.obj	e8b3e1ecebbc75a
+59	10019	8152060968203762	CMakeFiles/gps_redux.dir/src/GPS.cpp.obj	48eef5b8587982c7
+10020	10514	8152061067829046	SA.GPS.REDUX.asi	2174792e2d2a7e0a
+10020	10514	8152061067829046	SA.GPS.REDUX.lib	2174792e2d2a7e0a
+22	54	8152062108315587	D:/Project/Code/game/GTA-GPS-Redux/build/CMakeFiles/cmake.verify_globs	823787fd670353b0
+61	497	8152062108710375	SA.GPS.REDUX.asi	2174792e2d2a7e0a
+61	497	8152062108710375	SA.GPS.REDUX.lib	2174792e2d2a7e0a

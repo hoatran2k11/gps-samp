@@ -1,0 +1,3 @@
+D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/CMakeFiles/plugin_sdk-populate.dir
+D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/CMakeFiles/edit_cache.dir
+D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/CMakeFiles/rebuild_cache.dir

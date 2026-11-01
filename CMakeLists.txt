@@ -45,7 +45,7 @@ FetchContent_Declare(plugin_sdk URL ${PLUGIN_SDK_URL})
 FetchContent_MakeAvailable(plugin_sdk)
 
 # 3. Gather Source Files
-file(GLOB_RECURSE SOURCES "src/*.cpp")
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 
 # 4. Define the Library Target
 add_library(gps_redux SHARED ${SOURCES})

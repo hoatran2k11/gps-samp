@@ -1,0 +1,21 @@
+# ninja log v6
+2	92	8151164707537324	plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-mkdir	27cda8e7241af13e
+15270	15360	8151164860217631	D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-update	45da030d12279f35
+2	92	8151164707537324	D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-mkdir	27cda8e7241af13e
+92	15270	8151164859315484	plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-download	16231b8410821364
+92	15270	8151164859315484	D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-download	16231b8410821364
+15270	15360	8151164860217631	plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-update	45da030d12279f35
+15508	15587	8151164862501747	D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-build	b0ed8d246ec5d507
+15360	15431	8151164860944240	D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-patch	2194d8e99f402d1b
+15360	15431	8151164860944240	plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-patch	2194d8e99f402d1b
+15431	15508	8151164861718710	plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-configure	8611262fcad7175c
+15431	15508	8151164861718710	D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-configure	8611262fcad7175c
+15508	15587	8151164862501747	plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-build	b0ed8d246ec5d507
+15587	15662	8151164863251010	plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-install	1d50799212fcf93a
+15587	15662	8151164863251010	D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-install	1d50799212fcf93a
+15662	15739	8151164864013016	D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-test	c835c679b995775e
+15662	15739	8151164864013016	plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-test	c835c679b995775e
+15739	15842	8151164865031132	CMakeFiles/plugin_sdk-populate-complete	9fe3bf179e1a05d6
+15739	15842	8151164865031132	plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-done	9fe3bf179e1a05d6
+15739	15842	8151164865031132	D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/CMakeFiles/plugin_sdk-populate-complete	9fe3bf179e1a05d6
+15739	15842	8151164865031132	D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-done	9fe3bf179e1a05d6

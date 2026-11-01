@@ -1,0 +1,14 @@
+# Target labels
+ plugin_sdk-populate
+# Source files and their labels
+D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/CMakeFiles/plugin_sdk-populate
+D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/CMakeFiles/plugin_sdk-populate.rule
+D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/CMakeFiles/plugin_sdk-populate-complete.rule
+D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-build.rule
+D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-configure.rule
+D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-download.rule
+D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-install.rule
+D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-mkdir.rule
+D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-patch.rule
+D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-test.rule
+D:/Project/Code/game/GTA-GPS-Redux/build/_deps/plugin_sdk-subbuild/plugin_sdk-populate-prefix/src/plugin_sdk-populate-stamp/plugin_sdk-populate-update.rule

@@ -12,8 +12,9 @@
 #include <chrono>
 #include <cmath>
 #include <ctime>
-#include <future>
+#include <condition_variable>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <vector>
 
@@ -56,13 +57,21 @@
 class GPS
 {
   private:
-	// Một tuyến đường tính bất đồng bộ. `nodes`/`distance` chỉ được đụng khi giữ pathMutex.
+	// Một tuyến đường tính bất đồng bộ. `points`/`distance`/`epoch` chỉ được đụng khi giữ pathMutex.
+	// `points` là vector bất biến được publish nguyên khối (thread tính đường tạo vector mới rồi đổi
+	// con trỏ), nên thread game chỉ cần giữ khoá đúng lúc copy con trỏ, không phải suốt lúc vẽ.
 	struct Route
 	{
-		std::future<void> pending;
-		std::vector<CNodeAddress> nodes;
+		std::shared_ptr<const std::vector<CVector2D>> points; // toạ độ XY thế giới của các node
 		float distance = 0.0f;
 		int epoch = 0; // tăng mỗi khi đổi đích, để bỏ kết quả của lượt tính đã cũ
+
+		// Chỉ thread game đụng tới (điều tiết tần suất tính lại).
+		bool requested = false;
+		ULONGLONG lastRequestMs = 0;
+		CVector lastFrom, lastTo;
+
+		bool busy = false; // đang chờ/đang tính — bảo vệ bởi jobMutex
 	};
 
 	// Ảnh chụp trạng thái người chơi, lấy trên thread game để thread tính đường
@@ -77,6 +86,15 @@ class GPS
 
 	void Run();
 	void Update();
+
+	// Một thread tính đường duy nhất (ưu tiên thấp), thay cho việc tạo thread mới mỗi lần.
+	static DWORD WINAPI WorkerThread(LPVOID param);
+	void workerLoop();
+
+	// Cài hook sự kiện trên một thread riêng (xem GPS.cpp: SAMP ghi đè hook sớm).
+	static DWORD WINAPI InstallThread(LPVOID param);
+	void installEventHooks();
+	static bool waitForSampHook(int timeoutMs, util::Logger &log);
 	void DrawHud();
 	void DrawRadarOverlay();
 
@@ -84,11 +102,21 @@ class GPS
 	void updateMissionRoute(const CVector &playerPos);
 	tRadarTrace *findTargetTrace() const;
 	tRadarTrace *findMissionTrace(const CVector &playerPos, CVector &destOut) const;
+
+	// Đích dẫn đường thứ hai (ngoài waypoint): blip nhiệm vụ (single player) hoặc
+	// checkpoint do server tạo (SAMP).
+	struct Target
+	{
+		CVector pos;
+		CRGBA color;
+		const void *id = nullptr; // nhận diện "cùng một đích" giữa các khung hình
+	};
+	bool findServerTarget(const CVector &playerPos, Target &out);
 	bool resolveTraceDestination(const tRadarTrace *trace, CVector &out) const;
 	void clearRoute(Route &route);
 
 	PathQuery makeQuery(const CVector &dest) const;
-	void requestPath(Route &route, const PathQuery &query);
+	void requestPath(Route &route, PathQuery query, bool needGroundZ = false);
 	void renderPath(Route &route, const CRGBA &color);
 	void drawDistanceText(const CVector2D &radarAnchor, float yOffset, const CRGBA &color, float distance);
 
@@ -105,11 +133,35 @@ class GPS
 	CVector missionPos;
 	CRGBA missionColor = {180, 24, 24, 255};
 	int lastTargetBlip = 0;
-	const tRadarTrace *lastMissionTrace = nullptr;
+	const void *lastMissionTrace = nullptr;
+
+	// Chỉ để ghi log chẩn đoán khi trạng thái đổi (tránh spam mỗi khung hình).
+	bool updatedSinceDraw = false; // Update() đã chạy kể từ lần vẽ trước chưa
+	bool diagFallbackLogged = false;
+	bool diagFirstFrame = true;
+	int diagNavEnabled = -1;
+	int diagTargetHasNodes = -1;
+	int diagMissionHasNodes = -1;
+	int diagMode = -1;
+	int diagCheckpoints = -1;
+	int diagCoordBlips = -1;
+	const void *diagServerTarget = nullptr;
 
 	Route targetRoute;
 	Route missionRoute;
 	std::mutex pathMutex;
+
+	struct Job
+	{
+		Route *route = nullptr; // nullptr = không có việc
+		PathQuery query{};
+		int epoch = 0;
+	};
+	Job jobs[2];
+	std::mutex jobMutex;
+	std::condition_variable jobCv;
+	bool workerStop = false;
+	std::array<CNodeAddress, MAX_NODE_POINTS> workerNodes{};
 
 	// Bộ đệm game giữ con trỏ tới (patch bằng địa chỉ cố định) nên phải sống suốt phiên chơi.
 	std::array<char, 1024> pathNodesToStream{};
@@ -124,4 +176,5 @@ class GPS
 	{
 		this->Run();
 	}
+	~GPS();
 } GPSLineRedux;

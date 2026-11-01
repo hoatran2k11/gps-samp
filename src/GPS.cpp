@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+#include "CCheckpoints.h"
+
 namespace
 {
 	constexpr int RADAR_TRACE_COUNT = 175; // CRadar::ms_RadarTrace[175]
@@ -11,11 +13,19 @@ void GPS::Run()
 {
 	// Toàn bộ địa chỉ patch bên dưới là của GTA SA 1.0 US — đúng cả cho bản
 	// chạy SAMP (SAMP 0.3.7 bắt buộc dùng exe 1.0 US). Phiên bản khác thì không đụng vào gì.
-	const unsigned int ver = plugin::GetGameVersion();
-	if (ver != GAME_10US_COMPACT && ver != GAME_10US_HOODLUM)
-		return;
-
 	logger = util::Logger(cfg.LOGFILE_ENABLED);
+	logger.Log("GPS Redux (SAMP + single player) starting");
+	logger.LogF("config file: %s", cfg.loadedFrom.empty() ? "NOT FOUND - using defaults" : cfg.loadedFrom.c_str());
+	logger.LogF("module dir: %s", util::GetModuleDirectory().c_str());
+
+	const unsigned int ver = plugin::GetGameVersion();
+	logger.LogF("game version id = %u (1001/1002 = GTA SA 1.0 US)", ver);
+	if (ver != GAME_10US_COMPACT && ver != GAME_10US_HOODLUM)
+	{
+		logger.Log("unsupported game version - GPS DISABLED");
+		return;
+	}
+
 	active = true;
 
 	std::ranges::fill(pathNodesToStream, 1);
@@ -30,9 +40,91 @@ void GPS::Run()
 	plugin::patch::SetUInt(0x4518F8, 50000);
 	plugin::patch::SetUInt(0x4519B0, 49950);
 
+	// KHÔNG đăng ký sự kiện ngay ở đây. SAMP (samp.dll) tự hook lại đúng lệnh call mà
+	// gameProcessEvent dùng (0x53E981); nếu ta hook trước thì hook của ta bị ghi đè và
+	// không bao giờ chạy -> không có đường GPS. Nên cài hook trên thread riêng, sau khi
+	// samp.dll đã hook xong, để hook của ta nối chồng lên (kỹ thuật lấy từ janglapuk/SAMP-GPS).
+	if (HANDLE worker = CreateThread(nullptr, 0, &GPS::WorkerThread, this, 0, nullptr))
+		CloseHandle(worker);
+	else
+		logger.Log("CreateThread (path worker) failed - GPS DISABLED");
+
+	HANDLE thread = CreateThread(nullptr, 0, &GPS::InstallThread, this, 0, nullptr);
+	if (thread)
+		CloseHandle(thread);
+	else
+		logger.Log("CreateThread failed - GPS DISABLED");
+}
+
+namespace
+{
+	constexpr uintptr_t GAME_PROCESS_CALL = 0x53E981; // call CGame::Process trong vòng lặp chính
+}
+
+// Chờ tới khi lệnh call tại 0x53E981 trỏ vào trong samp.dll (samp.dll đã hook xong).
+bool GPS::waitForSampHook(int timeoutMs, util::Logger &log)
+{
+	for (int waited = 0; waited < timeoutMs; waited += 100)
+	{
+		HMODULE samp = GetModuleHandleA("samp.dll");
+		const auto *callOp = reinterpret_cast<const unsigned char *>(GAME_PROCESS_CALL);
+		if (samp && callOp[0] == 0xE8)
+		{
+			const auto base = reinterpret_cast<uintptr_t>(samp);
+			const auto *dos = reinterpret_cast<const IMAGE_DOS_HEADER *>(samp);
+			const auto *nt = reinterpret_cast<const IMAGE_NT_HEADERS *>(base + dos->e_lfanew);
+			const uintptr_t end = base + nt->OptionalHeader.SizeOfImage;
+
+			const uintptr_t target = GAME_PROCESS_CALL + 5 + *reinterpret_cast<const int *>(GAME_PROCESS_CALL + 1);
+			if (target >= base && target < end)
+				return true;
+		}
+		Sleep(100);
+	}
+	log.Log("timed out waiting for samp.dll hook");
+	return false;
+}
+
+DWORD WINAPI GPS::InstallThread(LPVOID param)
+{
+	static_cast<GPS *>(param)->installEventHooks();
+	return 0;
+}
+
+void GPS::installEventHooks()
+{
+	// 1. Chờ exe game giải mã xong (lệnh call hợp lệ).
+	for (int i = 0; i < 1200 && *reinterpret_cast<const unsigned char *>(GAME_PROCESS_CALL) != 0xE8; ++i)
+		Sleep(100);
+
+	// 2. SAMP hay single player? samp.dll thường đã được nạp từ trước; đợi tối đa 3s cho chắc.
+	bool samp = false;
+	if (cfg.FORCE_MODE == 2)
+		samp = true;
+	else if (cfg.FORCE_MODE == 0)
+	{
+		for (int i = 0; i < 30 && !samp; ++i)
+		{
+			samp = GetModuleHandleA("samp.dll") != nullptr;
+			if (!samp)
+				Sleep(100);
+		}
+	}
+	logger.LogF("hook installer: %s", samp ? "SAMP detected, waiting for samp.dll hook" : "single player");
+
+	if (samp)
+	{
+		// 3. Chờ samp.dll hook xong, rồi chờ người chơi vào game (tránh xung đột lúc đang tải).
+		const bool hooked = waitForSampHook(60000, logger);
+		logger.LogF("samp.dll hook %s", hooked ? "detected" : "NOT detected (installing anyway)");
+		for (int i = 0; i < 120 && !FindPlayerPed(0); ++i)
+			Sleep(500);
+	}
+
 	plugin::Events::gameProcessEvent += [this]() { this->Update(); };
 	plugin::Events::drawRadarOverlayEvent += [this]() { this->DrawRadarOverlay(); };
 	plugin::Events::drawRadarEvent += [this]() { this->DrawHud(); };
+	logger.Log("event hooks installed");
 }
 
 // ---------------------------------------------------------------------------
@@ -53,11 +145,34 @@ GPS::PathQuery GPS::makeQuery(const CVector &dest) const
 	return q;
 }
 
-void GPS::requestPath(Route &route, const PathQuery &query)
+void GPS::requestPath(Route &route, PathQuery query, bool needGroundZ)
 {
-	// Đang tính dở thì bỏ qua; khung hình sau sẽ yêu cầu lại với vị trí mới.
-	if (route.pending.valid() && route.pending.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+	// Điều tiết: không tính lại mỗi khung hình. Chỉ tính khi (a) chưa từng tính cho đích này,
+	// hoặc (b) đã qua updateInterval VÀ người chơi/đích đã dời đủ xa, hoặc (c) chưa có kết quả.
+	const ULONGLONG now = GetTickCount64();
+	bool due = !route.requested;
+	if (!due)
+	{
+		const ULONGLONG elapsed = now - route.lastRequestMs;
+		const float moved = DistanceBetweenPoints(query.from, route.lastFrom);
+		const float destMoved = DistanceBetweenPoints(query.to, route.lastTo);
+		bool noResult;
+		{
+			std::lock_guard<std::mutex> lock(pathMutex);
+			noResult = !route.points || route.points->size() < 2;
+		}
+		// Đích không tới được (không có kết quả) thì thử lại thưa hơn, tránh tìm đường thất bại liên tục.
+		const ULONGLONG retryMs = std::max<ULONGLONG>(2000, cfg.UPDATE_INTERVAL_MS);
+		due = (elapsed >= static_cast<ULONGLONG>(cfg.UPDATE_INTERVAL_MS) &&
+			   (moved >= cfg.MIN_MOVE_DISTANCE || destMoved >= cfg.MIN_MOVE_DISTANCE)) ||
+			  (noResult && elapsed >= retryMs);
+	}
+	if (!due)
 		return;
+
+	// Dò độ cao mặt đất (va chạm) khá tốn, chỉ làm khi thật sự cần tính đường, không phải mỗi khung hình.
+	if (needGroundZ)
+		query.to.z = CWorld::FindGroundZForCoord(query.to.x, query.to.y);
 
 	int epoch;
 	{
@@ -65,30 +180,102 @@ void GPS::requestPath(Route &route, const PathQuery &query)
 		epoch = route.epoch;
 	}
 
-	route.pending = std::async(std::launch::async, [this, &route, query, epoch]() {
-		short count = 0;
-		float distance = 0.0f;
-		std::array<CNodeAddress, MAX_NODE_POINTS> found{};
+	{
+		std::lock_guard<std::mutex> lock(jobMutex);
+		if (route.busy)
+			return; // lượt trước chưa xong; khung hình sau thử lại
+		route.busy = true;
+		Job &job = jobs[&route == &targetRoute ? 0 : 1];
+		job.route = &route;
+		job.query = query;
+		job.epoch = epoch;
+	}
 
-		ThePaths.DoPathSearch(0, query.from, CNodeAddress(), query.to, found.data(), &count, MAX_NODE_POINTS, &distance,
-							  999999.0f, NULL, 999999.0f, query.respectLanes, CNodeAddress(), false, query.boat);
-
-		count = std::clamp<short>(count, 0, MAX_NODE_POINTS);
-
-		std::lock_guard<std::mutex> lock(pathMutex);
-		if (route.epoch != epoch)
-			return; // đích đã đổi trong lúc tính — bỏ kết quả cũ
-		route.nodes.assign(found.begin(), found.begin() + count);
-		route.distance = distance;
-	});
+	route.requested = true;
+	route.lastRequestMs = now;
+	route.lastFrom = query.from;
+	route.lastTo = query.to;
+	jobCv.notify_one();
 }
 
 void GPS::clearRoute(Route &route)
 {
-	std::lock_guard<std::mutex> lock(pathMutex);
-	route.nodes.clear();
-	route.distance = 0.0f;
-	route.epoch++;
+	{
+		std::lock_guard<std::mutex> lock(pathMutex);
+		route.points.reset();
+		route.distance = 0.0f;
+		route.epoch++;
+	}
+	route.requested = false; // đích mới: tính ngay, không chờ updateInterval
+}
+
+DWORD WINAPI GPS::WorkerThread(LPVOID param)
+{
+	static_cast<GPS *>(param)->workerLoop();
+	return 0;
+}
+
+void GPS::workerLoop()
+{
+	// Tìm đường là việc nặng; hạ ưu tiên để không giành CPU với thread game.
+	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+
+	for (;;)
+	{
+		Job job;
+		{
+			std::unique_lock<std::mutex> lock(jobMutex);
+			jobCv.wait(lock, [this] { return workerStop || jobs[0].route || jobs[1].route; });
+			if (workerStop)
+				return;
+
+			Job &slot = jobs[jobs[0].route ? 0 : 1];
+			job = slot;
+			slot.route = nullptr;
+		}
+
+		short count = 0;
+		float distance = 0.0f;
+		ThePaths.DoPathSearch(0, job.query.from, CNodeAddress(), job.query.to, workerNodes.data(), &count,
+							  MAX_NODE_POINTS, &distance, 999999.0f, NULL, 999999.0f, job.query.respectLanes,
+							  CNodeAddress(), false, job.query.boat);
+		count = std::clamp<short>(count, 0, MAX_NODE_POINTS);
+
+		// Đổi node -> toạ độ XY một lần ở đây; thread game không phải tra bảng node mỗi khung hình nữa.
+		auto points = std::make_shared<std::vector<CVector2D>>();
+		points->reserve(count);
+		for (short i = 0; i < count; ++i)
+		{
+			if (CPathNode *node = ThePaths.GetPathNode(workerNodes[i]))
+			{
+				const CVector p = node->GetNodeCoors();
+				points->emplace_back(p.x, p.y);
+			}
+		}
+
+		{
+			std::lock_guard<std::mutex> lock(pathMutex);
+			if (job.route->epoch == job.epoch) // đích đã đổi trong lúc tính thì bỏ kết quả cũ
+			{
+				job.route->points = std::move(points);
+				job.route->distance = distance;
+			}
+		}
+		{
+			std::lock_guard<std::mutex> lock(jobMutex);
+			job.route->busy = false;
+		}
+	}
+}
+
+GPS::~GPS()
+{
+	{
+		std::lock_guard<std::mutex> lock(jobMutex);
+		workerStop = true;
+	}
+	jobCv.notify_all();
+	// Không chờ thread kết thúc: destructor chạy dưới loader lock, chờ ở đây dễ gây deadlock.
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +343,7 @@ tRadarTrace *GPS::findMissionTrace(const CVector &playerPos, CVector &destOut) c
 		if (!CTheScripts::IsPlayerOnAMission())
 			return nullptr;
 	}
-	else if (!cfg.MP_TRACK_SERVER_BLIPS)
+	else if (!cfg.MP_TRACK_CHECKPOINTS)
 	{
 		// SAMP: không có nhiệm vụ của game; chỉ theo blip server tạo nếu được bật.
 		return nullptr;
@@ -220,8 +407,12 @@ void GPS::updateTargetRoute(const CVector &playerPos)
 	if (!trace)
 	{
 		if (lastTargetBlip)
+		{
 			clearRoute(targetRoute);
+			logger.Log("waypoint removed");
+		}
 		lastTargetBlip = 0;
+		diagTargetHasNodes = -1;
 		return;
 	}
 
@@ -239,50 +430,171 @@ void GPS::updateTargetRoute(const CVector &playerPos)
 	{
 		clearRoute(targetRoute); // waypoint mới: bỏ đường cũ
 		lastTargetBlip = idx;
+		diagTargetHasNodes = -1;
+		logger.LogF("waypoint blip detected (index %d)", idx);
 	}
 
 	targetPos = trace->m_vecPos;
-	requestPath(targetRoute, makeQuery(targetPos));
+	// Waypoint đặt trên bản đồ không có độ cao; tìm node đường gần đích cần z đúng
+	// (cách làm của SAMP-GPS). Chỉ SAMP, để single player giữ nguyên như bản gốc.
+	requestPath(targetRoute, makeQuery(targetPos), mode == util::GameMode::SAMP);
 	renderTargetRoute = true;
+
+	size_t nodes;
+	{
+		std::lock_guard<std::mutex> lock(pathMutex);
+		nodes = targetRoute.points ? targetRoute.points->size() : 0;
+	}
+	if (diagTargetHasNodes != (nodes > 0))
+	{
+		diagTargetHasNodes = nodes > 0;
+		logger.LogF("waypoint at (%.0f, %.0f) - route %s (%u nodes)", targetPos.x, targetPos.y,
+					nodes ? "FOUND" : "not available yet", static_cast<unsigned>(nodes));
+	}
+}
+
+bool GPS::findServerTarget(const CVector &playerPos, Target &out)
+{
+	if (!cfg.MP_TRACK_CHECKPOINTS)
+		return false;
+
+	float bestDist = std::numeric_limits<float>::infinity();
+	bool found = false;
+	int usedCheckpoints = 0, coordBlips = 0;
+
+	// 1. Checkpoint 3D của game (cột sáng/vòng tròn mà server đặt).
+	if (CCheckpoints::m_aCheckPtArray)
+	{
+		for (unsigned int i = 0; i < 32; ++i)
+		{
+			const CCheckpoint *cp = &CCheckpoints::m_aCheckPtArray[i];
+			if (!cp->m_bIsUsed)
+				continue;
+			usedCheckpoints++;
+
+			const float d = DistanceBetweenPoints(playerPos, cp->m_vecPosition);
+			if (d <= cfg.DISABLE_PROXIMITY || d >= bestDist)
+				continue;
+
+			bestDist = d;
+			found = true;
+			out.pos = cp->m_vecPosition;
+			out.color = cfg.CHECKPOINT_CLR;
+			out.id = cp;
+		}
+	}
+
+	// 2. Blip toạ độ trên radar (checkpoint thường kèm một chấm trên radar).
+	const int targetSlot = FrontEndMenuManager.m_nTargetBlipIndex ? LOWORD(FrontEndMenuManager.m_nTargetBlipIndex) : -1;
+	for (int i = 0; i < RADAR_TRACE_COUNT; ++i)
+	{
+		const tRadarTrace *trace = &CRadar::ms_RadarTrace[i];
+		if (!trace->m_bInUse || trace->m_nRadarSprite != 0 || trace->m_nBlipDisplay < 2 ||
+			trace->m_nBlipType != BLIP_COORD || i == targetSlot)
+			continue;
+		coordBlips++;
+
+		const float d = DistanceBetweenPoints(playerPos, trace->m_vecPos);
+		if (d <= cfg.DISABLE_PROXIMITY || d >= bestDist)
+			continue;
+
+		bestDist = d;
+		found = true;
+		out.pos = trace->m_vecPos;
+		out.color = cfg.CHECKPOINT_CLR;
+		out.id = trace;
+	}
+
+	if (diagCheckpoints != usedCheckpoints || diagCoordBlips != coordBlips)
+	{
+		diagCheckpoints = usedCheckpoints;
+		diagCoordBlips = coordBlips;
+		logger.LogF("server targets: %d game checkpoint(s), %d coordinate blip(s)", usedCheckpoints, coordBlips);
+	}
+	if (found && diagServerTarget != out.id)
+	{
+		diagServerTarget = out.id;
+		logger.LogF("tracking server target at (%.0f, %.0f, %.0f), %.0f m away", out.pos.x, out.pos.y, out.pos.z,
+					bestDist);
+	}
+	return found;
 }
 
 void GPS::updateMissionRoute(const CVector &playerPos)
 {
-	CVector dest;
-	const tRadarTrace *trace = findMissionTrace(playerPos, dest);
+	Target target;
+	bool have = false;
 
-	if (!trace)
+	if (mode == util::GameMode::SinglePlayer)
+	{
+		CVector dest;
+		if (const tRadarTrace *trace = findMissionTrace(playerPos, dest))
+		{
+			have = true;
+			target.pos = dest;
+			target.color = util::SetupColor(trace->m_nColour, trace->m_bFriendly, cfg);
+			target.id = trace;
+		}
+	}
+	else
+	{
+		have = findServerTarget(playerPos, target);
+	}
+
+	if (!have)
 	{
 		if (lastMissionTrace)
 			clearRoute(missionRoute);
 		lastMissionTrace = nullptr;
+		diagServerTarget = nullptr;
 		return;
 	}
 
-	if (trace != lastMissionTrace)
+	if (target.id != lastMissionTrace)
 	{
 		clearRoute(missionRoute); // đổi mục tiêu: bỏ đường cũ
-		lastMissionTrace = trace;
+		lastMissionTrace = target.id;
 	}
 
-	missionPos = dest;
-	missionColor = util::SetupColor(trace->m_nColour, trace->m_bFriendly, cfg);
-	requestPath(missionRoute, makeQuery(dest));
+	missionPos = target.pos;
+	missionColor = target.color;
+	// Blip không có độ cao (z ~ 0) -> lấy độ cao mặt đất để tìm node đường gần đích.
+	requestPath(missionRoute, makeQuery(target.pos),
+				mode == util::GameMode::SAMP && std::fabs(target.pos.z) < 0.01f);
 	renderMissionRoute = true;
 }
 
 void GPS::Update()
 {
+	updatedSinceDraw = true;
 	mode = util::DetectGameMode(cfg.FORCE_MODE);
 	player = FindPlayerPed(0);
 
 	renderTargetRoute = false;
 	renderMissionRoute = false;
 
+	if (diagFirstFrame)
+	{
+		diagFirstFrame = false;
+		logger.Log("first game frame reached (events are firing)");
+	}
+	if (diagMode != static_cast<int>(mode))
+	{
+		diagMode = static_cast<int>(mode);
+		logger.LogF("mode = %s", mode == util::GameMode::SAMP ? "SAMP" : "single player");
+	}
+
 	if (mode == util::GameMode::SAMP && !cfg.MP_ENABLED)
 		return;
 
-	if (!util::NavEnabled(cfg, player))
+	const int navOn = util::NavEnabled(cfg, player) ? 1 : 0;
+	if (diagNavEnabled != navOn)
+	{
+		diagNavEnabled = navOn;
+		logger.LogF("navigation %s (player=%s, in vehicle=%s)", navOn ? "ENABLED" : "disabled", player ? "yes" : "no",
+					(player && player->m_pVehicle) ? "yes" : "no");
+	}
+	if (!navOn)
 		return;
 
 	const CVector playerPos = player->GetPosition();
@@ -296,6 +608,19 @@ void GPS::Update()
 
 void GPS::DrawRadarOverlay()
 {
+	// Phòng khi gameProcessEvent bị hook khác (SAMP...) chiếm mất: vẽ radar vẫn chạy mỗi
+	// khung hình, nên tự cập nhật ở đây nếu Update() chưa được gọi kể từ lần vẽ trước.
+	if (!updatedSinceDraw)
+	{
+		if (!diagFallbackLogged)
+		{
+			diagFallbackLogged = true;
+			logger.Log("gameProcessEvent not firing - updating from the radar draw event instead");
+		}
+		Update();
+	}
+	updatedSinceDraw = false;
+
 	if (!util::NavEnabled(cfg, player))
 		return;
 
@@ -344,9 +669,16 @@ void GPS::DrawHud()
 
 void GPS::renderPath(Route &route, const CRGBA &vColor)
 {
-	std::lock_guard<std::mutex> lock(pathMutex);
+	// Chỉ giữ khoá đủ lâu để copy con trỏ; vẽ (nặng) thì không giữ khoá, thread tính đường không bị chặn.
+	std::shared_ptr<const std::vector<CVector2D>> points;
+	{
+		std::lock_guard<std::mutex> lock(pathMutex);
+		points = route.points;
+	}
+	if (!points)
+		return;
 
-	const size_t count = std::min<size_t>(route.nodes.size(), MAX_NODE_POINTS);
+	const size_t count = std::min<size_t>(points->size(), MAX_NODE_POINTS);
 	if (count < 2)
 		return;
 
@@ -354,14 +686,9 @@ void GPS::renderPath(Route &route, const CRGBA &vColor)
 
 	for (size_t i = 0; i < count; i++)
 	{
-		const CPathNode *node = ThePaths.GetPathNode(route.nodes[i]);
-		if (!node)
-			return; // vùng đường chưa nạp — bỏ qua khung hình này
-
-		const CVector nodePosn = node->GetNodeCoors();
 		CVector2D tmpPoint;
 
-		CRadar::TransformRealWorldPointToRadarSpace(tmpPoint, CVector2D(nodePosn.x, nodePosn.y));
+		CRadar::TransformRealWorldPointToRadarSpace(tmpPoint, (*points)[i]);
 		if (!fullMap)
 		{
 			CRadar::TransformRadarPointToScreenSpace(tmpNodePoints[i], tmpPoint);
@@ -396,7 +723,15 @@ void GPS::renderPath(Route &route, const CRGBA &vColor)
 		scissorRect.Grow(rect.left, rect.right, rect.top, rect.bottom);
 	}
 
+	// Đặt rõ ràng mọi trạng thái vẽ thay vì thừa hưởng từ lần vẽ trước: sương mù (fog) còn bật,
+	// alpha/blend sai... sẽ làm màu đường bị nhạt và ngả trắng.
 	RwRenderStateSet(rwRENDERSTATETEXTURERASTER, NULL);
+	RwRenderStateSet(rwRENDERSTATEFOGENABLE, reinterpret_cast<void *>(FALSE));
+	RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE, reinterpret_cast<void *>(TRUE));
+	RwRenderStateSet(rwRENDERSTATESRCBLEND, reinterpret_cast<void *>(rwBLENDSRCALPHA));
+	RwRenderStateSet(rwRENDERSTATEDESTBLEND, reinterpret_cast<void *>(rwBLENDINVSRCALPHA));
+	RwRenderStateSet(rwRENDERSTATEZTESTENABLE, reinterpret_cast<void *>(FALSE));
+	RwRenderStateSet(rwRENDERSTATEZWRITEENABLE, reinterpret_cast<void *>(FALSE));
 
 	float widthScale = 1.0f;
 	if (fullMap)

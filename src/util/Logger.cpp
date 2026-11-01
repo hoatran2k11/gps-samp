@@ -1,6 +1,8 @@
 #include "Logger.h"
 
 #include <chrono>
+#include <cstdarg>
+#include <cstdio>
 #include <ctime>
 
 #include "Config.h"
@@ -27,6 +29,19 @@ namespace util
 		logfile << stime << " | " << val << '\n';
 		logfile.flush();
 		logLines++;
+	}
+
+	void Logger::LogF(const char *fmt, ...)
+	{
+		if (!enabled)
+			return;
+
+		char buf[512];
+		va_list args;
+		va_start(args, fmt);
+		std::vsnprintf(buf, sizeof(buf), fmt, args);
+		va_end(args);
+		Log(buf);
 	}
 
 	Logger::Logger(const bool enabled) : enabled(enabled)
